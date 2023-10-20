@@ -1,87 +1,64 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ExtendedDefaultRules #-}
+{-# LANGUAGE QuasiQuotes #-}
 module Main where
 
 import Prelude hiding (div)
 
 import Purview
-import qualified Network.Wai as Wai
-import qualified Network.Wai.Handler.Warp as Warp
-import qualified Network.WebSockets as WebSocket
-import qualified Network.Wai.Handler.WebSockets as WaiWebSocket
-import Network.HTTP.Types
+import Purview.Server
 
-import Debug.Trace
+{-
 
--- trigger = handler [Parent "sideways"] 0 reducer
---   where
---     reducer "up" st = (const 0, [])
---     reducer "down" st = (const 1, [])
---     reducer "incrParent" st = (const 99, [Parent "up"])
---
--- clickHandler = handler [] (0 :: Integer) reducer
---   where
---     reducer "up" st = (const 0, [])
---     reducer "down" st = (const 1, [Self "sideways"])
---     reducer "sideways" st = (const 5, [])
---     reducer _ st = (const 99, [])
---
--- root :: Purview () IO
--- root = clickHandler $ \state -> div
---   [ onClick "up" $ div [ text "up" ]
---   , onClick "down" $ div [ text "down" ]
---   , div [ text (show state) ]
---   , trigger $ \state -> div
---     [ onClick "incrParent" $ div [ text $ "incrParent: " <> show state ]
---     , onClick "down" $ div [ text $ "state: " <> show state ]
---     ]
---   ]
+This is a short example to get started with.
 
-------------------
--- Form Example --
-------------------
+When you trigger a blur on one field, it sends the text
+to the event handler.
 
-nameAttr = Attribute . Generic "name"
+The same thing happens when you trigger change on the other
+text field.
+
+We just add something to the front of the text, and the new
+state flows back down for display.
+
+-}
+
+-- some helpers
 typeAttr = Attribute . Generic "type"
+nameAttr = Attribute . Generic "name"
 
-submitButton = typeAttr "submit" $ button [ text "submit" ]
+textField = nameAttr "text" $ typeAttr "text" $ input []
 
-toString :: Maybe String -> String
-toString (Just str) = str
-toString (Nothing)  = "nothing"
+-- events we can handle
+data Event = Blur String | Change String
+  deriving (Show, Eq)
 
-name state = onSubmit toString $ div
-  [ form [ nameAttr "description" $ input []
-         , submitButton
-         ]
-  , text state
+-- these take the incoming data and turn them into events
+-- we can handle
+toBlur :: Maybe String -> Event
+toBlur = maybe (Blur "") Blur
+
+toChange :: Maybe String -> Event
+toChange = maybe (Change "") Change
+
+viewStyle = [style|
+  font-size: 24px;
+  div {
+    margin: 20px;
+  }
+|]
+
+view :: String -> Purview Event m
+view state = viewStyle $ div
+  [ div [ text $ "The current state: " <> state ]
+  , div [ onBlur toBlur textField ]
+  , div [ onChange toChange textField ]
   ]
 
-eventHandler = handler [] "" reducer
-  where reducer str state = (const "gotcha", [])
+eventsHandler = handler' [] "" reducer
+  where
+    reducer (Blur str)   state = ("blur: " <> str, [])
+    reducer (Change str) state = ("change: " <> str, [])
 
-root :: Purview () IO
-root = eventHandler $ \state -> name state
+root url = eventsHandler view
 
 main :: IO ()
-main =
-  let
-    port = 8001
-    settings = Warp.setPort port Warp.defaultSettings
-  in
-   Warp.runSettings settings
-     $ WaiWebSocket.websocketsOr
-         WebSocket.defaultConnectionOptions
-         (webSocketHandler root)
-         (httpHandler root)
-
-webSocketHandler component pendingConnection = do
-  connection <- WebSocket.acceptRequest pendingConnection
-  startWebSocketLoop defaultConfiguration { devMode=True } root connection
-
-httpHandler component request respond =
-  respond
-    $ Wai.responseBuilder
-        status200
-        [("Content-Type", "text/html")]
-        (renderFullPage defaultConfiguration root)
+main = serve defaultConfiguration root

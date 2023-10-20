@@ -29,12 +29,8 @@ executable purview-template
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
-    build-depends:    base ^>=4.16.1.0
-                    , warp
-                    , wai
+    build-depends:    base >=4.16.1.0
                     , purview
-                    , websockets
-                    , wai-websockets
-                    , http-types
+                    , raw-strings-qq
     hs-source-dirs:   app
     default-language: Haskell2010
